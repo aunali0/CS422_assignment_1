@@ -54,19 +54,17 @@ class Host:
 
         resp = requests.get(f"http://ip-api.com/json/{self.ip}")
         if resp.status_code != 200:
-            print("bad response for {self.host} status code {resp.status_code}")
+            print(f"bad response for {self.host} status code {resp.status_code}")
             return False
 
         resp_json = resp.json()
         if resp_json["status"] != "success":
-            print("bad response for {self.host}")
+            print(f"bad response for {self.host}")
             print(resp_json)
             return False
 
-
         host_coords = (resp_json["lat"], resp_json["lon"])
         self.dist_km = geopy.distance.geodesic(PURDUE_COORDS, host_coords).km
-        print("dist is ", self.dist_km)
 
         return True
 
