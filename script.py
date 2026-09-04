@@ -1,66 +1,91 @@
-import subprocess #lib for running bash cmds in python
-import csv 
-import platform #used to find out os
-import re #regex lib for parsing ping output
-import urllib.request #used to get public ip address
+import geopy.distance
+import matplotlib.pyplot as plt
+import requests
 
-#csv format
-#IP/HOST,PORT,GB/S,CONTINENT,COUNTRY,SITE,PROVIDER
+import json
+import subprocess
+import platform
 
+# from https://www.latlong.net/place/purdue-university-in-west-lafayette-34294.html
+PURDUE_COORDS = (40.423710, -86.921242)
 
-#return a list of ip servers from csv file
-def load_csv(csv_path = "listed_iperf3_servers.csv"):
-    hosts = []
-    with open(csv_path, newline = "", encoding = "utf-8") as f:
-        reader = csv.DictReader(f) #first row is header makes dict keyed by header names
-        for row in reader: 
-            host = row["IP/HOST"].strip() #column that holds IP
-            if not host:
-                continue #skips unneeded items
-            hosts.append({
-                "host": host,
-                "country": row.get("COUNTRY", ""),
-                "site": row.get("SITE", ""),
-                "provider": row.get("PROVIDER", "")
-            })
-    return hosts
+with open("listed_iperf3_servers.json", "r") as f:
+    servers_json = json.load(f)
+
+class Host:
+    def __init__(self, host, count):
+        self.host = host
+
+        self.ok = self.ping(count)
+        if self.ok:
+            self.ok = self.calculate_dist()
 
 
+    def ping(self, count):
+        flag = "-c" #flag for linux/mac
+        if platform.system() == "Windows":
+            flag = "-n"
 
-#host = ip
-#count = how many echo requests to send (4 default on windows)
-def ping(host, count = 4):
-    flag = "-c" #flag for linux/mac
-    if platform.system() == "Windows":
-        flag = "-n"
-    out = subprocess.run(["ping", flag, str(count), host], capture_output=True, text=True)
-    return out.stdout #parse this output for min/avg/max rtt
+        out = subprocess.run(["ping", flag, str(count), "-i", "0.1", self.host], capture_output=True, text=True)
 
+        if out.returncode != 0:
+            print(f"couldn't ping {self.host} : {out.stderr}")
+            return False
 
-def parse_rtt(output):
-    #pull all time = xx ms from output
-    #match to 'time=23.4ms', 'time=40ms', 'time<1ms' for any os 
-    #instead of reading the summary which is different just sum up the times and calc ourselves
-    times = [float(t) for t in re.findall(r"time[=<]\s*([\d.]+)\s*ms", output)]
-    if not times: 
-        return None
-    return {
-        "min": min(times),
-        "avg": sum(times) / len(times),
-        "max": max(times),
-        "count": len(times)
-    }
+        lines = out.stdout.splitlines()
 
-#combo func
-def ping_and_parse(host, count=4):
-    output = ping(host, count)
-    stats = parse_rtt(output)
-    if stats is None:
-        return {"host": host, "responsive": False}
-    return {"host": host, "responsive": True, **stats}
+        # e.g. PING speed.mymanga.pro (102.215.35.132): 56 data bytes
+        ip_line = lines[0]
+        self.ip = ip_line.split()[2][1:-2]
+
+        # e.g. round-trip min/avg/max/stddev = 212.948/213.369/214.287/0.444 ms
+        stat_str = lines[-1]
+
+        stat_list = list(map(float, stat_str.split()[3].split("/")))
+        self.rtt_min = stat_list[0]
+        self.rtt_avg = stat_list[1]
+        self.rtt_max = stat_list[2]
+        
+        return True
 
 
-#main loop 
-for server in load_csv():
-    result = ping_and_parse(server["host"])
-    print(result)
+    def calculate_dist(self):
+        self.dist = None
+
+        resp = requests.get(f"http://ip-api.com/json/{self.ip}")
+        if resp.status_code != 200:
+            print(f"bad response for {self.host} status code {resp.status_code}")
+            return False
+
+        resp_json = resp.json()
+        if resp_json["status"] != "success":
+            print(f"bad response for {self.host}")
+            print(resp_json)
+            return False
+
+        host_coords = (resp_json["lat"], resp_json["lon"])
+        self.dist_km = geopy.distance.geodesic(PURDUE_COORDS, host_coords).km
+
+        return True
+
+hosts = []
+
+for server in servers_json:
+    host = Host(server["IP/HOST"], 5)
+    if host.ok:
+        hosts.append(host)
+
+distance = [host.dist_km for host in hosts]
+rtt_min  = [host.rtt_min for host in hosts]
+rtt_max  = [host.rtt_max for host in hosts]
+
+plt.scatter(distance, rtt_min, label='RTT min', color='tab:blue', s=15)
+plt.scatter(distance, rtt_max, label='RTT max', color='tab:red', s=15)
+
+plt.xlabel('Distance')
+plt.ylabel('RTT')
+plt.title('Distance vs RTT')
+plt.legend()
+plt.tight_layout()
+plt.savefig('output.png')
+
