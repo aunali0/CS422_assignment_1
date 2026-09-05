@@ -62,6 +62,26 @@ class Host:
 
         return True
 
+
+def traceroute(self, hops, probes, wait):
+    #set max hops probes and waitime
+    cmd = ["traceroute", "-n", "-m", str(hops), "-q", str(probes), "-w", str(wait), self.host]
+
+    #worst timeout everything probe on every hop times out
+    timeout = hops * probes * wait + 5
+    try: 
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        print(f"traceroute to {self.host} timed out")
+        return False
+
+    if out.returncode != 0:
+        print(f"couldn't traceroute {self.host} : {out.stderr}")
+        return False
+
+    #TODO: parse handeling and prolly more err checks  
+
+
 hosts = []
 
 for server in servers_json:
