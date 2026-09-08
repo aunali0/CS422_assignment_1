@@ -32,9 +32,9 @@ class Host:
 
         lines = out.stdout.splitlines()
 
-        # e.g. PING speed.mymanga.pro (102.215.35.132): 56 data bytes
+        # e.g. PING speed.mymanga.pro (102.215.35.132) 56(84) bytes of data. 102.215.35.132
         ip_line = lines[0]
-        self.ip = ip_line.split()[2][1:-2]
+        self.ip = ip_line.split()[2][1:-1]
 
         # e.g. round-trip min/avg/max/stddev = 212.948/213.369/214.287/0.444 ms
         stat_line = lines[-1]
