@@ -104,6 +104,44 @@ class Host:
         print(f"traced {self.host}: {len(self.hops)} hops, reached={self.reached}")
         return len(self.hops) > 0
 
+
+def plot_hop_latency_breakdown(traced_hosts):
+    """Plot estimated per-hop latency for each traced destination."""
+    fig, ax = plt.subplots()
+
+    for host_index, host in enumerate(traced_hosts):
+        previous_hop = 0
+        previous_rtt = 0
+        bar_bottom = 0
+
+        for hop_number, rtt in host.hops:
+            # A gap in hop numbers represents one or more non-responsive hops.
+            hop_label = (f"Hop {hop_number}" if hop_number == previous_hop + 1
+                         else f"Hops {previous_hop + 1}-{hop_number}")
+            hop_latency = max(0, rtt - previous_rtt)
+
+            ax.bar(host_index, hop_latency, bottom=bar_bottom,
+                   color=plt.cm.tab20((hop_number - 1) % 20),
+                   edgecolor="black", linewidth=0.4)
+
+            if hop_latency >= 2:
+                ax.text(host_index, bar_bottom + hop_latency / 2, hop_label,
+                        ha="center", va="center", fontsize=6)
+
+            bar_bottom += hop_latency
+            previous_hop = hop_number
+            previous_rtt = rtt
+
+    ax.set_xticks(range(len(traced_hosts)))
+    ax.set_xticklabels([host.host for host in traced_hosts], rotation=20,
+                       ha="right")
+    ax.set_xlabel("Destination IP")
+    ax.set_ylabel("Estimated latency (ms)")
+    ax.set_title("Per-hop Latency Breakdown")
+    fig.tight_layout()
+    fig.savefig("hop_latency_breakdown.pdf")
+    plt.close(fig)
+
 with open("listed_iperf3_servers.json", "r") as f:
     servers_json = json.load(f)
 
@@ -157,3 +195,5 @@ plt.legend()
 plt.tight_layout()
 plt.savefig('output2.png')
 plt.close()
+
+plot_hop_latency_breakdown(traced)
