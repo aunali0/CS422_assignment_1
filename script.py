@@ -3,6 +3,7 @@ import os
 import random
 import socket
 import subprocess
+import sys
 
 import geopy.distance
 import matplotlib.pyplot as plt
@@ -148,7 +149,9 @@ def plot_hop_latency_breakdown(traced_hosts):
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-with open("listed_iperf3_servers.json", "r") as f:
+input_file = sys.argv[1] if len(sys.argv) > 1 else "listed_iperf3_servers.json"
+
+with open(input_file, "r") as f:
     servers_json = json.load(f)
 
 hosts = []
